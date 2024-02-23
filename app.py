@@ -16,7 +16,7 @@ with 250 words. Please provide the summary of the text given here : """
 ##getting the transcript data from YT videos
 def extract_transcript_details(youtube_video_url):
     try:
-        video_id = youtube_video_url.split("=")[1][:11]
+        video_id = youtube_video_url.split("=")[1]
         transcript_text = YouTubeTranscriptApi.get_transcript(video_id)
         transcript = ""
 
