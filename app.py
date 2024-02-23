@@ -38,7 +38,7 @@ st.title("Youtube Transcript to Detailed Notes Converter")
 youtube_link = st.text_input("Enter Youtube video URL")
 
 if youtube_link:
-    video_id = youtube_link.split("=")[1][:11]
+    video_id = youtube_link.split("=")[1]
     st.image(f"http://img.youtube.com/vi/{video_id}/0.jpg",use_column_width=True)
 
 if st.button("Get Detailed Notes"):
