@@ -1,15 +1,15 @@
 import os
 import re
 from urllib.parse import urlparse, parse_qs
+from typing import Optional
 
 import streamlit as st
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-# youtube-transcript-api imports (handle various exception types gracefully)
 from youtube_transcript_api import YouTubeTranscriptApi
 try:
-    # These may not exist in very old versions, so import defensively
+    # Newer versions
     from youtube_transcript_api._errors import (
         TranscriptsDisabled,
         NoTranscriptFound,
@@ -17,7 +17,7 @@ try:
         TooManyRequests,
     )
 except Exception:
-    # Fallbacks if running on an older version
+    # Fallbacks for older versions
     class TranscriptsDisabled(Exception): ...
     class NoTranscriptFound(Exception): ...
     class VideoUnavailable(Exception): ...
@@ -45,10 +45,16 @@ PROMPT = (
     "Transcript:\n"
 )
 
+# Cache decorator fallback (supports older Streamlit)
+try:
+    cache_data = st.cache_data
+except AttributeError:
+    cache_data = st.cache
+
 # ---------------------------
 # Helpers
 # ---------------------------
-def get_video_id(url: str):
+def get_video_id(url: str) -> Optional[str]:
     """
     Extract a YouTube video ID from many common URL formats.
     Works for:
@@ -56,7 +62,6 @@ def get_video_id(url: str):
       - https://youtu.be/VIDEO_ID
       - https://www.youtube.com/shorts/VIDEO_ID
       - https://www.youtube.com/embed/VIDEO_ID
-      - plus query params like &t=123s etc.
     """
     try:
         parsed = urlparse(url)
@@ -94,9 +99,8 @@ def get_video_id(url: str):
         pass
     return None
 
-
-@st.cache_data(show_spinner=False, ttl=3600)
-def extract_transcript_text(youtube_url: str) -> str | None:
+@cache_data(ttl=3600)
+def extract_transcript_text(youtube_url: str) -> Optional[str]:
     """
     Fetch transcript text using whatever API the installed library supports.
     Tries:
@@ -164,12 +168,10 @@ def extract_transcript_text(youtube_url: str) -> str | None:
         st.error(f"Unexpected error while fetching transcript: {e}")
         return None
 
-
-def generate_summary_with_gemini(transcript_text: str) -> str | None:
+def generate_summary_with_gemini(transcript_text: str) -> Optional[str]:
     """
     Generate a ~250-word bullet summary using Gemini.
-    Uses a simple string input for maximum SDK compatibility.
-    Tries a couple of model names for broader support.
+    Tries a couple of model names for broader SDK compatibility.
     """
     if not transcript_text:
         return None
@@ -178,9 +180,10 @@ def generate_summary_with_gemini(transcript_text: str) -> str | None:
         try:
             model = genai.GenerativeModel(model_name)
             resp = model.generate_content(PROMPT + transcript_text)
+            # Common SDK shape
             if hasattr(resp, "text") and resp.text:
                 return resp.text
-            # Some SDK versions return candidates; try a safe fallback:
+            # Fallback for candidate-based responses
             if getattr(resp, "candidates", None):
                 parts = []
                 for c in resp.candidates:
@@ -192,14 +195,11 @@ def generate_summary_with_gemini(transcript_text: str) -> str | None:
                         continue
                 if parts:
                     return "\n".join(parts)
-        except Exception as e:
-            # Try next model name
-            last_err = e
+        except Exception:
             continue
 
     st.error("Gemini summarization failed. Please check your API key and model access.")
     return None
-
 
 # ---------------------------
 # UI
