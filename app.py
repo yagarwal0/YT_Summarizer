@@ -75,7 +75,7 @@ youtube_link = st.text_input("Enter YouTube video URL")
 if youtube_link:
     video_id = get_video_id(youtube_link)
     if video_id:
-        st.image(f"http://img.youtube.com/vi/{video_id}/0.jpg", use_column_width=True)
+        st.image(f"http://img.youtube.com/vi/{video_id}/0.jpg", use_container_width=True)
 
 if st.button("Get Detailed Notes"):
     with st.spinner("Fetching transcript and generating summary..."):
