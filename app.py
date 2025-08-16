@@ -55,43 +55,30 @@ except AttributeError:
 # Helpers
 # ---------------------------
 def get_video_id(url: str) -> Optional[str]:
-    """
-    Extract a YouTube video ID from many common URL formats.
-    Works for:
-      - https://www.youtube.com/watch?v=VIDEO_ID
-      - https://youtu.be/VIDEO_ID
-      - https://www.youtube.com/shorts/VIDEO_ID
-      - https://www.youtube.com/embed/VIDEO_ID
-    """
+    """Extract YouTube video ID from many common URL formats."""
     try:
         parsed = urlparse(url)
         host = (parsed.hostname or "").lower()
 
-        # youtu.be/<id>
         if host in ("youtu.be", "www.youtu.be"):
             vid = parsed.path.lstrip("/").split("/")[0]
             if len(vid) == 11:
                 return vid
 
-        # youtube.com variants
         if "youtube" in host:
-            # /watch?v=<id>
             if parsed.path == "/watch":
                 vid = parse_qs(parsed.query).get("v", [None])[0]
                 if vid and len(vid) == 11:
                     return vid
-            # /shorts/<id>
             if parsed.path.startswith("/shorts/"):
                 parts = parsed.path.split("/")
                 if len(parts) >= 3 and len(parts[2]) == 11:
                     return parts[2]
-            # /embed/<id>
             if parsed.path.startswith("/embed/"):
                 parts = parsed.path.split("/")
                 if len(parts) >= 3 and len(parts[2]) == 11:
                     return parts[2]
 
-        # Regex fallback (last resort)
         m = re.search(r"(?:v=|/)([0-9A-Za-z_-]{11})", url)
         if m:
             return m.group(1)
@@ -99,15 +86,10 @@ def get_video_id(url: str) -> Optional[str]:
         pass
     return None
 
+
 @cache_data(ttl=3600)
 def extract_transcript_text(youtube_url: str) -> Optional[str]:
-    """
-    Fetch transcript text using whatever API the installed library supports.
-    Tries:
-      1) YouTubeTranscriptApi.get_transcript (if available)
-      2) YouTubeTranscriptApi.list_transcripts + find/translate to English
-    Returns a single string or None on failure.
-    """
+    """Fetch transcript text using whichever API method is available."""
     video_id = get_video_id(youtube_url)
     if not video_id:
         st.error("Invalid YouTube URL. Please enter a valid video link.")
@@ -116,45 +98,38 @@ def extract_transcript_text(youtube_url: str) -> Optional[str]:
     languages = ["en", "en-US", "en-GB"]
 
     try:
-        # Path A: get_transcript available
+        # Path A: get_transcript
         if hasattr(YouTubeTranscriptApi, "get_transcript"):
             try:
                 items = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
                 return " ".join(chunk.get("text", "") for chunk in items)
             except (NoTranscriptFound, TranscriptsDisabled):
-                # fall through to try list_transcripts approach
                 pass
 
-        # Path B: list_transcripts available
+        # Path B: list_transcripts
         if hasattr(YouTubeTranscriptApi, "list_transcripts"):
             tl = YouTubeTranscriptApi.list_transcripts(video_id)
-
-            # Prefer direct English transcript
             try:
                 tr = tl.find_transcript(languages)
                 return " ".join(chunk.get("text", "") for chunk in tr.fetch())
             except Exception:
-                # Try translating first available transcript to English
                 for tr in tl:
                     try:
                         tr_en = tr.translate("en")
                         return " ".join(chunk.get("text", "") for chunk in tr_en.fetch())
                     except Exception:
-                        # Fall back to whatever transcript exists if translation fails
                         try:
                             return " ".join(chunk.get("text", "") for chunk in tr.fetch())
                         except Exception:
                             continue
-
-            # If we reach here, nothing worked
             raise NoTranscriptFound(video_id)
 
-        # Neither method exists (very old/odd install)
+        # If neither method exists
         st.error(
-            "Your installed `youtube-transcript-api` does not expose "
+            "⚠️ Your installed `youtube-transcript-api` does not expose "
             "`get_transcript` or `list_transcripts`.\n\n"
-            "Please update it:\n"
-            "  pip install -U youtube-transcript-api"
+            "👉 Please update it:\n"
+            "    pip install -U youtube-transcript-api"
         )
         return None
 
@@ -168,11 +143,9 @@ def extract_transcript_text(youtube_url: str) -> Optional[str]:
         st.error(f"Unexpected error while fetching transcript: {e}")
         return None
 
+
 def generate_summary_with_gemini(transcript_text: str) -> Optional[str]:
-    """
-    Generate a ~250-word bullet summary using Gemini.
-    Tries a couple of model names for broader SDK compatibility.
-    """
+    """Generate a ~250-word bullet summary using Gemini API."""
     if not transcript_text:
         return None
 
@@ -180,10 +153,8 @@ def generate_summary_with_gemini(transcript_text: str) -> Optional[str]:
         try:
             model = genai.GenerativeModel(model_name)
             resp = model.generate_content(PROMPT + transcript_text)
-            # Common SDK shape
             if hasattr(resp, "text") and resp.text:
                 return resp.text
-            # Fallback for candidate-based responses
             if getattr(resp, "candidates", None):
                 parts = []
                 for c in resp.candidates:
