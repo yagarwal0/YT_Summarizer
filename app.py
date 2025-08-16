@@ -3,8 +3,7 @@ from dotenv import load_dotenv
 import os
 from urllib.parse import urlparse, parse_qs
 import google.generativeai as genai
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 # Load environment variables
 load_dotenv()
@@ -30,7 +29,7 @@ def get_video_id(url: str):
             return parsed_url.path.split("/")[2]
     return None
 
-# Function to fetch transcript
+# Function to fetch transcript (latest API way)
 def extract_transcript_details(youtube_video_url):
     try:
         video_id = get_video_id(youtube_video_url)
@@ -38,9 +37,15 @@ def extract_transcript_details(youtube_video_url):
             st.error("Invalid YouTube URL. Please enter a valid link.")
             return None
 
-        transcript_text = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript = " ".join([i["text"] for i in transcript_text])
-        return transcript
+        # Fetch transcript list
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+        # Try to get English transcript
+        transcript = transcript_list.find_transcript(['en']).fetch()
+
+        # Join into one text block
+        transcript_text = " ".join([i["text"] for i in transcript])
+        return transcript_text
 
     except (TranscriptsDisabled, NoTranscriptFound):
         st.warning("Transcript not available for this video.")
